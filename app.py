@@ -8,6 +8,7 @@ df = pd.read_excel('data/ArticlesByCategory.xlsx', sheet_name='Sheet1')
 
 # Initialize the app
 app = Dash(__name__)
+server = app.server
 
 # App layout
 app.layout = html.Div([
