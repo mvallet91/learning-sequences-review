@@ -1,6 +1,7 @@
 # Import packages
 from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
+import numpy as np
 import plotly.graph_objs as go
 import plotly.express as px
 
@@ -15,20 +16,21 @@ server = app.server
 # App layout
 app.layout = html.Div([
     dash_table.DataTable(
+        id='interactive-datatable',
         style_data={
             'whiteSpace': 'normal',
             'height': 'auto',
             'lineHeight': '15px'
         },
         data=df.to_dict('records'),
-        columns=[{'id': c, 'name': c} for c in df.columns],
+        columns=[{'id': c, 'name': c, "selectable": True} for c in df.columns],
         filter_action="native",
         filter_options={"placeholder_text": "Filter column..."},
         editable=False,
         sort_action="native",
-        sort_mode="multi",
-        column_selectable="single",
-        row_selectable="multi",
+        sort_mode="single",
+        column_selectable="multi",
+        row_selectable=False,
         row_deletable=True,
         selected_columns=[],
         selected_rows=[],
@@ -36,85 +38,108 @@ app.layout = html.Div([
         page_current=0,
         page_size=10,
     ),
-    dcc.RadioItems(
-        id='column-selector',
-        options=[{'label': c, 'value': c} for c in df.columns],
-        value=df.columns.values[0],
-        labelStyle={'display': 'inline-block'}
-    ),
-    dcc.Graph(id='bar-chart'),
-
-    dcc.Checklist(
-        id='sankey-selector',
-        options=[{'label': c, 'value': c} for c in df.columns],
-        value=['Task', 'Purpose'],
-        labelStyle={'display': 'inline-block'}
-    ),
-    dcc.Graph(id='sankey')
+    dcc.Graph(id='sankey-container', style={'width': '95vw'}),
+    html.Div(id='datatable-graph-container')
 ])
 
 
 # Define the callback function to update the bar chart
 @app.callback(
-    Output('bar-chart', 'figure'),
-    Input('column-selector', 'value'))
-def update_bar_chart(selected_column):
-    # Create a count of each unique value in the selected column
-    value_counts = df[selected_column].value_counts()
+    Output('datatable-graph-container', 'children'),
+    Input('interactive-datatable', 'selected_columns'),
+    Input('interactive-datatable', "derived_virtual_data"),
+)
+def update_bar_chart(selected_columns, rows):
+    dff = df if rows is None else pd.DataFrame(rows)
 
-    # Create the bar chart
-    fig = go.Figure(data=[go.Bar(
-        x=value_counts,
-        y=value_counts.index,
-        orientation='h'
-    )])
+    return [
+        dcc.Graph(
+            id=column,
+            figure={
+                "data": [
+                    {
+                        "y": dff[column].value_counts(),
+                        "x": dff[column].value_counts().index,
+                        "type": "bar",
+                        "orientation": 'v',
+                        'marker': {'color': 'lightsteelblue'},
+                    }
+                ],
+                "layout": {
+                    "xaxis": {"automargin": True},
+                    "yaxis": {
+                        "automargin": True,
+                        "title": {"text": column}
+                    },
+                    "height": 250,
+                    "margin": {"t": 50, "l": 50, "r": 50},
+                },
+            },
+        )
 
-    # Update the layout
+        for column in selected_columns if column in dff
+    ]
+
+
+@app.callback(
+    Output('sankey-container', 'figure'),
+    Input('interactive-datatable', 'selected_columns'),
+    Input('interactive-datatable', "derived_virtual_data"),
+    Input('interactive-datatable', 'active_cell')
+)
+def update_sankey_chart(selected_columns, rows, active_cell):
+    dff = df if rows is None else pd.DataFrame(rows)
+    dimensions = []
+    for col in selected_columns:
+        dimensions.append({
+            'label': col,
+            'values': dff[col]
+        })
+
+    color = np.zeros(len(dff), dtype='uint8')
+    if active_cell:
+        active_row_id = active_cell['row']
+        color[active_row_id] = 1
+
+    colorscale = [[0, 'lightsteelblue'], [1, 'firebrick']];
+
+    fig = go.Figure(
+        go.Parcats(
+            dimensions=dimensions,
+            tickfont={'size': 14, 'family': 'Times'},
+            labelfont={'size': 16, 'family': 'Times'},
+            arrangement='freeform',
+            line={'colorscale': colorscale, 'cmin': 0,
+                  'cmax': 1, 'color': color, 'shape': 'hspline'}
+        )
+    )
+
+    title = f'{selected_columns} Relationship' if selected_columns else ''
     fig.update_layout(
-        title=f'{selected_column} distribution',
-        xaxis_title='Count',
-        yaxis_title=selected_column
+        title_text=title,
+        font_size=12,
+        margin=dict(l=250, r=250, t=50, b=20),
     )
 
     return fig
 
 
-@app.callback(
-    Output('sankey', 'figure'),
-    Input('sankey-selector', 'value'))
-def update_sankey_chart(selected_columns):
-    dimensions = []
-    for col in selected_columns:
-        dimensions.append({
-            'label': col,
-            'values': df[col]
-        })
-
-    fig = go.Figure(go.Parcats(
-        dimensions=dimensions
-    ))
-
-    title = f'{selected_columns} Relationship'
-    fig.update_layout(title_text=title, font_size=10)
-    return fig
-
-
-@app.callback(
-    Output("sankey-selector", "options"),
-    Input("sankey-selector", "value"),
-)
-def update_multi_options(value):
-    options = [{'label': c, 'value': c} for c in df.columns]
-    if len(value) >= 3:
-        options = [
-            {
-                "label": option["label"],
-                "value": option["value"],
-                "disabled": option["value"] not in value,
-            }
-            for option in options
-        ]
-    return options
+# @app.callback(
+#     Output("sankey-selector", "options"),
+#     Input("sankey-selector", "value"),
+# )
+# def update_multi_options(value):
+#     options = [{'label': c, 'value': c} for c in df.columns]
+#     if len(value) >= 3:
+#         options = [
+#             {
+#                 "label": option["label"],
+#                 "value": option["value"],
+#                 "disabled": option["value"] not in value,
+#             }
+#             for option in options
+#         ]
+#     return options
 
 
 # Run the app
