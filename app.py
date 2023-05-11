@@ -13,6 +13,19 @@ app = Dash(__name__)
 server = app.server
 
 
+style_data_conditional = [
+    {
+        "if": {"state": "active"},
+        "backgroundColor": "rgba(150, 180, 225, 0.2)",
+        "border": "1px transparent",
+    },
+    {
+        "if": {"state": "selected"},
+        "backgroundColor": 'rgba(0, 116, 217, .03)',
+        "border": "1px transparent",
+    },
+]
+
 # App layout
 app.layout = html.Div([
     dash_table.DataTable(
@@ -23,7 +36,9 @@ app.layout = html.Div([
             'lineHeight': '15px'
         },
         data=df.to_dict('records'),
-        columns=[{'id': c, 'name': c, "selectable": True} for c in df.columns],
+        # columns=[{'id': c, 'name': c, "selectable": True} for c in df.columns],
+        columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Cite' else {
+            'id': x, 'name': x, "selectable": True} for x in df.columns],
         filter_action="native",
         filter_options={"placeholder_text": "Filter column..."},
         editable=False,
@@ -32,11 +47,12 @@ app.layout = html.Div([
         column_selectable="multi",
         row_selectable=False,
         row_deletable=True,
-        selected_columns=[],
+        selected_columns=['Domain', 'Task'],
         selected_rows=[],
         page_action="native",
         page_current=0,
         page_size=10,
+        style_data_conditional=style_data_conditional
     ),
     dcc.Graph(id='sankey-container', style={'width': '95vw'}),
     html.Div(id='datatable-graph-container')
@@ -122,6 +138,23 @@ def update_sankey_chart(selected_columns, rows, active_cell):
     )
 
     return fig
+
+
+@app.callback(
+    Output("interactive-datatable", "style_data_conditional"),
+    [Input("interactive-datatable", "active_cell")]
+)
+def update_selected_row_color(active):
+    style = style_data_conditional.copy()
+    if active:
+        style.append(
+            {
+                "if": {"row_index": active["row"]},
+                "backgroundColor": "rgba(150, 180, 225, 0.2)",
+                # "border": "1px solid blue",
+            },
+        )
+    return style
 
 
 # @app.callback(
