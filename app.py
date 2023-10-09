@@ -6,7 +6,7 @@ import plotly.graph_objs as go
 import plotly.express as px
 
 # Incorporate data
-df = pd.read_excel('data/ArticlesByCategory.xlsx', sheet_name='Sheet1')
+df = pd.read_excel('data/ArticlesByCategory.xlsx', sheet_name='ArticlesByCategory')
 
 # Initialize the app
 app = Dash(__name__)
@@ -30,13 +30,27 @@ style_data_conditional = [
 app.layout = html.Div([
     dash_table.DataTable(
         id='interactive-datatable',
+        style_table={'width': '120%', 'minWidth': '100%', 'tableLayout': 'fixed'},
         style_data={
             'whiteSpace': 'normal',
             'height': 'auto',
             'lineHeight': '15px'
         },
+        style_cell={
+            'overflow': 'hidden',
+            'textOverflow': 'ellipsis',
+            'maxWidth': 0,
+        },
+        style_cell_conditional=[
+            {'if': {'column_id': 'Cite'}, 'width': '20%'},
+        ],
+        tooltip_data=[
+            {
+                column: {'value': str(value), 'type': 'markdown'}
+                for column, value in row.items()
+            } for row in df.to_dict('records')
+        ],
         data=df.to_dict('records'),
-        # columns=[{'id': c, 'name': c, "selectable": True} for c in df.columns],
         columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Cite' else {
             'id': x, 'name': x, "selectable": True} for x in df.columns],
         filter_action="native",
